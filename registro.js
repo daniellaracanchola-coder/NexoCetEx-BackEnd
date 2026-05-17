@@ -1,6 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const db = require('./db');
+const adminRoutes = require('./admin');
 
 const router = express.Router();
 
@@ -70,6 +71,8 @@ router.post('/registro', async (req, res) => {
                         mensaje: 'Error al crear el usuario'
                     });
                 }
+                adminRoutes.notificarUsuarioPendiente(username);
+                
                 return res.json({
                     mensaje: 'Usuario registrado correctamente'
                 });

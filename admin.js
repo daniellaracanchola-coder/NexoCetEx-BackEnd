@@ -1,11 +1,37 @@
 const express = require('express');
 const db = require('./db');
 const router = express.Router();
+const enviarNotificacion = require('./enviarNotificacion');
 
 const {
     verificarToken,
     verificarAdmin
 } = require('./middleware/auth');
+
+const notificarUsuarioPendiente = (username) => {
+    const sql = `
+        SELECT token_push
+        FROM usuarios
+        WHERE rol = 'admin'
+        AND autorizado = 1
+        AND token_push IS NOT NULL
+    `;
+
+    db.query(sql, async (err, admins) => {
+        if (err) {
+            console.error('Error al botener administradores:', err);
+            return;
+        }
+
+        for (const admin of admins) {
+            await enviarNotificacion(
+                admin.token_push,
+                'Usuario pendiente de aprobacion',
+                `${username} solicita aprobacion de cuenta`
+            );
+        }
+    });
+};
 
 router.get(
     '/pendientes', 
@@ -158,4 +184,5 @@ router.put(
     }
 );
 
+router.notificarUsuarioPendiente = notificarUsuarioPendiente;
 module.exports = router;

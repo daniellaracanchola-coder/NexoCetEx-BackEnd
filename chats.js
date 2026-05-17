@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('./db');
+const enviarNotificacion = require('./enviarNotificacion');
 
 const {
     verificarToken
@@ -452,10 +453,61 @@ router.post(
                     });
                 }
 
-                res.json({
-                    mensaje: 'Mensaje enviado con exito',
-                    id: result.insertId
+                const obtenerTokenSql = `
+                    SELECT u.token_push, u.username
+                    FROM chat_integrantes ci
+                    INNER JOIN usuarios u
+                        ON ci.usuario_id = u.id
+                    WHERE ci.chat_id = ?
+                    AND ci.usuario_id != ?
+                    AND u.token_push IS NOT NULL
+                `;
+
+                const obtenerEmisorSql = `
+                    SELECT username
+                    FROM usuarios
+                    WHERE id = ?
+                `;
+
+                db.query(obtenerEmisorSql, [usuarioId], (err, usuarioResult) => {
+
+                if (err || usuarioResult.length === 0) {
+                    console.error('Error al obtener usuario:', err);
+
+                    return res.status(500).json({
+                        mensaje: 'Error al obtener usuario'
+                    });
+                }
+
+                const usernameEmisor = usuarioResult[0].username;
+
+                db.query(obtenerTokenSql, [chatId, usuarioId], async (err, usuarios) => {
+
+                    if (err) {
+                        console.error('Error al obtener tokens:', err);
+                    } else {
+
+                        for (const usuario of usuarios) {
+
+                            await enviarNotificacion(
+                                usuario.token_push,
+                                usernameEmisor,
+                                desencriptarMensaje(contenidoEncriptado)
+                            );
+
+                        }
+
+                    }
+
+                    res.json({
+                        mensaje: 'Mensaje enviado con exito',
+                        id: result.insertId
+                    });
+
                 });
+
+            });
+
             });
         });
     }

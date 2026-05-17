@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('./db');
 const router = express.Router();
+const enviarNotificacion = require('./enviarNotificacion');
 
 const { verificarToken } = require('./middleware/auth');
 
@@ -69,10 +70,38 @@ router.post(
                 mensaje: 'Error al crear el aviso'
             });
         }
+        const obtenerTokenSql = `
+            SELECT token_push
+            FROM usuarios
+            WHERE autorizado = 1
+            AND token_push IS NOT NULL
+            AND username != ?
+            AND (
+                ? = 'todos'
+                OR rol = ?
+            )
+        `;
 
-        res.json({
+        db.query(
+            obtenerTokenSql, 
+            [autor, rolDes || 'todos', rolDes || 'todos'], 
+            async (err, usuarios) => {
+            if (err) {
+                console.error('Error al obtener tokens:', err);
+            } else {
+                for (const usuario of usuarios) {
+                    await enviarNotificacion(
+                        usuario.token_push,
+                        titulo,
+                        conte
+                    );
+                }
+            }
+
+            res.json({
             mensaje: 'Aviso creado',
             id: result.insertId
+            });
         });
     });
 });

@@ -1,7 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const app = express();
-
+const notificacionesRoutes = require('./notificaciones');
+const admin = require('./firebase');
 app.use(cors());
 app.use(express.json());
 
@@ -14,6 +15,7 @@ app.use('/admin', require('./admin'));
 app.use('/avisos', require ('./avisos'));
 app.use('/chats', require('./chats'));
 app.use('/config', require('./config'));
+app.use('/api/usuarios', notificacionesRoutes);
 
 app.listen(PORT, () => {
     console.log(`Servidor corriendo en http://localhost:${PORT}`);
