@@ -6,7 +6,7 @@ const admin = require('./firebase');
 app.use(cors());
 app.use(express.json());
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use('/', require('./index'));
 app.use('/auth', require('./login'));
@@ -18,5 +18,5 @@ app.use('/config', require('./config'));
 app.use('/api/usuarios', notificacionesRoutes);
 
 app.listen(PORT, () => {
-    console.log(`Servidor corriendo en http://localhost:${PORT}`);
+    console.log(`Servidor corriendo en ${PORT}`);
 });
