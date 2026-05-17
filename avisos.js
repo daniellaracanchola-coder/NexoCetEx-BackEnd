@@ -72,13 +72,16 @@ router.post(
         }
         const obtenerTokenSql = `
             SELECT token_push
-            FROM usuarios
+            FROM usuarios u
+            LEFT JOIN configuraciones_usuarios c
+                ON u.id = c.usuario_id
             WHERE autorizado = 1
             AND token_push IS NOT NULL
-            AND username != ?
+            AND u.username != ?
+            AND COALESCE(c.notificaciones, 1) = 1
             AND (
                 ? = 'todos'
-                OR rol = ?
+                OR u.rol = ?
             )
         `;
 

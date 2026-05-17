@@ -10,11 +10,14 @@ const {
 
 const notificarUsuarioPendiente = (username) => {
     const sql = `
-        SELECT token_push
-        FROM usuarios
-        WHERE rol = 'admin'
-        AND autorizado = 1
-        AND token_push IS NOT NULL
+        SELECT u.token_push
+        FROM usuarios u
+        LEFT JOIN configuraciones_usuarios c
+            ON u.id = c.usuario_id
+        WHERE u.rol = 'admin'
+        AND u.autorizado = 1
+        AND u.token_push IS NOT NULL
+        AND COALESCE(c.notificaciones, 1) = 1
     `;
 
     db.query(sql, async (err, admins) => {

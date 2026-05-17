@@ -394,10 +394,21 @@ router.get(
                     });
                 }
 
-                const mensajesDesencriptados = mensajes.map(m => ({
-                    ...m,
-                    contenido: desencriptarMensaje(m.contenido)
-                }));
+                const mensajesDesencriptados = mensajes.map(m => {
+                    try {
+                        return{
+                            ...m,
+                            contenido: desencriptarMensaje(m.contenido)
+                        };
+                    } catch (error) {
+                        console.error('Error al desencriptar el mensaje:', error.message);
+
+                        return{
+                            ...m,
+                            contenido: '[Mensaje no disponible]'
+                        };
+                    }
+                });
 
                 res.json(mensajesDesencriptados);
             });
@@ -458,9 +469,12 @@ router.post(
                     FROM chat_integrantes ci
                     INNER JOIN usuarios u
                         ON ci.usuario_id = u.id
+                    LEFT JOIN configuraciones_usuarios c
+                        ON u.id = c.usuario_id
                     WHERE ci.chat_id = ?
                     AND ci.usuario_id != ?
                     AND u.token_push IS NOT NULL
+                    AND COALESCE(c.notificaciones, 1) = 1
                 `;
 
                 const obtenerEmisorSql = `
