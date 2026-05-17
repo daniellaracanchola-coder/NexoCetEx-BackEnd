@@ -13,6 +13,7 @@ app.use('/auth', require('./registro'));
 app.use('/admin', require('./admin'));
 app.use('/avisos', require ('./avisos'));
 app.use('/chats', require('./chats'));
+app.use('/config', require('./config'));
 
 app.listen(PORT, () => {
     console.log(`Servidor corriendo en http://localhost:${PORT}`);

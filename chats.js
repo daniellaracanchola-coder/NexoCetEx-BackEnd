@@ -5,6 +5,11 @@ const {
     verificarToken
 } = require('./middleware/auth');
 
+const {
+    encriptarMensaje,
+    desencriptarMensaje
+} = require('./Seguridad/cryptoSend');
+
 const router = express.Router();
 
 //Para buscar usuarios
@@ -387,7 +392,13 @@ router.get(
                         mensaje: 'Error al obtener mensajes'
                     });
                 }
-                res.json(mensajes);
+
+                const mensajesDesencriptados = mensajes.map(m => ({
+                    ...m,
+                    contenido: desencriptarMensaje(m.contenido)
+                }));
+
+                res.json(mensajesDesencriptados);
             });
         });
     }
@@ -432,7 +443,9 @@ router.post(
                 VALUES (?, ?, ?)
             `;
 
-            db.query(insertarSQL, [chatId, usuarioId, contenido], (err, result) => {
+            const contenidoEncriptado = encriptarMensaje(contenido);
+
+            db.query(insertarSQL, [chatId, usuarioId, contenidoEncriptado], (err, result) => {
                 if(err) {
                     return res.status(500).json({
                         mensaje: 'Error al enviar el mensaje'
@@ -682,5 +695,7 @@ router.delete(
         });
     }
 );
+
+
 
 module.exports = router;
