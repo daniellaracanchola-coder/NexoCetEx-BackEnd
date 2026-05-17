@@ -1,7 +1,7 @@
 const express = require('express');
 const db = require('./db');
 const router = express.Router();
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 
 const {
     verificarToken
