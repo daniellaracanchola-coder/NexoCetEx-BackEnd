@@ -217,22 +217,83 @@ router.get(
                 LIMIT 1
                 )
                 ELSE c.nombre
-            END AS nombreMostrar
+            END AS nombreMostrar,
+            um.id AS ultimoMensajeId,
+            um.fecha AS ultimoMensajeFecha,
+            um.contenido AS ultimoMensajeContenido,
+            um.usuario_id AS ultimoMensajeUsuarioId,
+            umu.username AS ultimoMensajeUsername,
+            COALESCE(cl.ultimo_mensaje_visto_id, 0) AS ultimoMensajeVistoId,
+            (
+                SELECT COUNT(*)
+                FROM mensajes m
+                WHERE m.chat_id = c.id
+                AND m.id > COALESCE(cl.ultimo_mensaje_visto_id, 0)
+                AND m.usuario_id != ?
+            ) AS mensajesNoLeidos
         FROM chats c
         INNER JOIN chat_integrantes ci
             ON c.id = ci.chat_id
+        LEFT JOIN chat_lecturas cl
+            ON cl.chat_id = c.id AND cl.usuario_id = ?
+        LEFT JOIN mensajes um ON um.id = (
+            SELECT m2.id
+            FROM mensajes m2
+            WHERE m2.chat_id = c.id
+            ORDER BY m2.fecha DESC, m2.id DESC
+            LIMIT 1
+        )
+        LEFT JOIN usuarios umu ON umu.id = um.usuario_id
         WHERE ci.usuario_id = ?
-        ORDER BY c.fecha_creacion DESC
+        ORDER BY COALESCE(um.fecha, c.fecha_creacion) DESC
     `;
 
-    db.query(sql, [usuarioId, usuarioId], (err, result) => {
+    db.query(
+        sql,
+        [usuarioId, usuarioId, usuarioId, usuarioId],
+        (err, result) => {
         if (err) {
+            console.error('Error mis-chats:', err);
             return res.status(500).json({
                 mensaje: 'Error al obtener chats'
             });
         }
 
-        res.json(result);
+        const chatsConPreview = result.map((chat) => {
+            let preview = '';
+            if (chat.ultimoMensajeContenido) {
+                try {
+                    preview = desencriptarMensaje(chat.ultimoMensajeContenido);
+                } catch (e) {
+                    preview = '[Mensaje no disponible]';
+                }
+                if (preview.length > 80) {
+                    preview = `${preview.substring(0, 80)}…`;
+                }
+                if (Number(chat.ultimoMensajeUsuarioId) === usuarioId) {
+                    preview = `Tú: ${preview}`;
+                } else if (chat.ultimoMensajeUsername) {
+                    preview = `${chat.ultimoMensajeUsername}: ${preview}`;
+                }
+            }
+
+            return {
+                id: chat.id,
+                nombre: chat.nombre,
+                tipo: chat.tipo,
+                grado: chat.grado,
+                grupo: chat.grupo,
+                creado_por: chat.creado_por,
+                fecha_creacion: chat.fecha_creacion,
+                nombreMostrar: chat.nombreMostrar,
+                ultimoMensajeId: chat.ultimoMensajeId,
+                ultimoMensajeFecha: chat.ultimoMensajeFecha,
+                ultimoMensajePreview: preview || null,
+                mensajesNoLeidos: Number(chat.mensajesNoLeidos) || 0,
+            };
+        });
+
+        res.json(chatsConPreview);
     });
 });
 
@@ -377,6 +438,7 @@ router.get(
             const mensajesSql = `
                 SELECT
                     m.id,
+                    m.usuario_id,
                     m.contenido,
                     m.fecha,
                     u.username
@@ -384,7 +446,7 @@ router.get(
                 INNER JOIN usuarios u
                     ON m.usuario_id = u.id
                 WHERE m.chat_id = ?
-                ORDER BY m.fecha ASC
+                ORDER BY m.fecha ASC, m.id ASC
             `;
 
             db.query(mensajesSql, [chatId], (err, mensajes) => {
@@ -410,7 +472,27 @@ router.get(
                     }
                 });
 
-                res.json(mensajesDesencriptados);
+                const marcarLeidoSql = `
+                    INSERT INTO chat_lecturas (usuario_id, chat_id, ultimo_mensaje_visto_id)
+                    VALUES (
+                        ?,
+                        ?,
+                        COALESCE(
+                            (SELECT MAX(m.id) FROM mensajes m WHERE m.chat_id = ?),
+                            0
+                        )
+                    )
+                    ON DUPLICATE KEY UPDATE
+                        ultimo_mensaje_visto_id = VALUES(ultimo_mensaje_visto_id),
+                        fecha_lectura = CURRENT_TIMESTAMP
+                `;
+
+                db.query(marcarLeidoSql, [usuarioId, chatId, chatId], (errLeido) => {
+                    if (errLeido) {
+                        console.error('Error marcar leido (tabla chat_lecturas?):', errLeido);
+                    }
+                    res.json(mensajesDesencriptados);
+                });
             });
         });
     }
