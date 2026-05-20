@@ -73,8 +73,10 @@ router.post('/registro', async (req, res) => {
                 }
                 adminRoutes.notificarUsuarioPendiente(username);
                 
-                return res.json({
-                    mensaje: 'Usuario registrado correctamente'
+                return res.status(201).json({
+                    mensaje:
+                        'Registro enviado correctamente. Un administrador debe autorizar tu cuenta antes de que puedas iniciar sesión. Te avisaremos cuando esté lista.',
+                    pendienteAutorizacion: true,
                 });
             });
         } catch (error) {
