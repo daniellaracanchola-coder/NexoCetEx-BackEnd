@@ -15,6 +15,7 @@ app.use('/admin', require('./admin'));
 app.use('/avisos', require ('./avisos'));
 app.use('/chats', require('./chats'));
 app.use('/config', require('./config'));
+app.use('/perfil', require('./perfil'));
 app.use('/api/usuarios', notificacionesRoutes);
 
 app.listen(PORT, () => {

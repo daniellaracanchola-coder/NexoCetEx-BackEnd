@@ -199,5 +199,261 @@ router.put(
     }
 );
 
+// Actualizar perfil (admin: directo; alumnos solo vía solicitud)
+router.put(
+    '/usuarios/:id/perfil',
+    verificarToken,
+    verificarAdmin,
+    async (req, res) => {
+        const objetivoId = Number(req.params.id);
+        const { username, grado, grupo } = req.body;
+
+        try {
+            const filas = await queryAsync(
+                'SELECT id, username, rol, grado, grupo FROM usuarios WHERE id = ?',
+                [objetivoId]
+            );
+            if (!filas.length) {
+                return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+            }
+
+            const objetivo = filas[0];
+            const updates = [];
+            const params = [];
+
+            if (username != null && String(username).trim()) {
+                const nuevo = String(username).trim();
+                if (nuevo !== objetivo.username) {
+                    const existe = await queryAsync(
+                        'SELECT id FROM usuarios WHERE username = ? AND id != ?',
+                        [nuevo, objetivoId]
+                    );
+                    if (existe.length) {
+                        return res.status(400).json({
+                            mensaje: 'Ese nombre de usuario ya existe',
+                        });
+                    }
+                    updates.push('username = ?');
+                    params.push(nuevo);
+                }
+            }
+
+            if (objetivo.rol === 'alumno') {
+                if (grado != null && grado !== '') {
+                    const g = Number(grado);
+                    if (g < 1 || g > 8) {
+                        return res.status(400).json({ mensaje: 'Grado no válido' });
+                    }
+                    if (g !== Number(objetivo.grado)) {
+                        updates.push('grado = ?');
+                        params.push(g);
+                    }
+                }
+                if (grupo != null && grupo !== '') {
+                    const grupos = ['A', 'B', 'C', 'D', 'E', 'S'];
+                    if (!grupos.includes(grupo)) {
+                        return res.status(400).json({ mensaje: 'Grupo no válido' });
+                    }
+                    if (grupo !== objetivo.grupo) {
+                        updates.push('grupo = ?');
+                        params.push(grupo);
+                    }
+                }
+            }
+
+            if (!updates.length) {
+                return res.json({ mensaje: 'Sin cambios', perfil: objetivo });
+            }
+
+            params.push(objetivoId);
+            await queryAsync(
+                `UPDATE usuarios SET ${updates.join(', ')} WHERE id = ?`,
+                params
+            );
+
+            const actualizado = await queryAsync(
+                'SELECT id, username, rol, grado, grupo FROM usuarios WHERE id = ?',
+                [objetivoId]
+            );
+
+            res.json({
+                mensaje: 'Perfil actualizado',
+                perfil: actualizado[0],
+            });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ mensaje: 'Error al actualizar perfil' });
+        }
+    }
+);
+
+router.get(
+    '/solicitudes-perfil',
+    verificarToken,
+    verificarAdmin,
+    async (req, res) => {
+        try {
+            const rows = await queryAsync(
+                `
+                SELECT
+                    s.id,
+                    s.usuario_id,
+                    s.username_nuevo,
+                    s.grado_nuevo,
+                    s.grupo_nuevo,
+                    s.estado,
+                    s.fecha_solicitud,
+                    u.username AS username_actual,
+                    u.grado AS grado_actual,
+                    u.grupo AS grupo_actual
+                FROM solicitudes_perfil s
+                INNER JOIN usuarios u ON s.usuario_id = u.id
+                WHERE s.estado = 'pendiente'
+                ORDER BY s.fecha_solicitud ASC
+                `
+            );
+            res.json(rows);
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ mensaje: 'Error al obtener solicitudes' });
+        }
+    }
+);
+
+async function aplicarSolicitudPerfil(solicitudId, adminId, aprobar) {
+    const solicitudes = await queryAsync(
+        `
+        SELECT s.*, u.username, u.grado, u.grupo, u.rol
+        FROM solicitudes_perfil s
+        INNER JOIN usuarios u ON s.usuario_id = u.id
+        WHERE s.id = ? AND s.estado = 'pendiente'
+        `,
+        [solicitudId]
+    );
+
+    if (!solicitudes.length) {
+        return { error: 'no_encontrada' };
+    }
+
+    const s = solicitudes[0];
+
+    if (!aprobar) {
+        await queryAsync(
+            `
+            UPDATE solicitudes_perfil
+            SET estado = 'rechazada', admin_id = ?, fecha_revision = NOW()
+            WHERE id = ?
+            `,
+            [adminId, solicitudId]
+        );
+        return { ok: true };
+    }
+
+    const updates = [];
+    const params = [];
+
+    if (s.username_nuevo) {
+        const existe = await queryAsync(
+            'SELECT id FROM usuarios WHERE username = ? AND id != ?',
+            [s.username_nuevo, s.usuario_id]
+        );
+        if (existe.length) {
+            return { error: 'username_duplicado' };
+        }
+        updates.push('username = ?');
+        params.push(s.username_nuevo);
+    }
+
+    if (s.grado_nuevo != null) {
+        updates.push('grado = ?');
+        params.push(s.grado_nuevo);
+    }
+
+    if (s.grupo_nuevo) {
+        updates.push('grupo = ?');
+        params.push(s.grupo_nuevo);
+    }
+
+    if (updates.length) {
+        params.push(s.usuario_id);
+        await queryAsync(
+            `UPDATE usuarios SET ${updates.join(', ')} WHERE id = ?`,
+            params
+        );
+    }
+
+    await queryAsync(
+        `
+        UPDATE solicitudes_perfil
+        SET estado = 'aprobada', admin_id = ?, fecha_revision = NOW()
+        WHERE id = ?
+        `,
+        [adminId, solicitudId]
+    );
+
+    const perfil = await queryAsync(
+        'SELECT id, username, rol, grado, grupo FROM usuarios WHERE id = ?',
+        [s.usuario_id]
+    );
+
+    return { ok: true, perfil: perfil[0], usuarioId: s.usuario_id };
+}
+
+router.put(
+    '/solicitudes-perfil/:id/aprobar',
+    verificarToken,
+    verificarAdmin,
+    async (req, res) => {
+        try {
+            const resultado = await aplicarSolicitudPerfil(
+                req.params.id,
+                req.usuario.id,
+                true
+            );
+
+            if (resultado.error === 'no_encontrada') {
+                return res.status(404).json({ mensaje: 'Solicitud no encontrada' });
+            }
+            if (resultado.error === 'username_duplicado') {
+                return res.status(400).json({
+                    mensaje: 'El nombre solicitado ya está en uso',
+                });
+            }
+
+            res.json({
+                mensaje: 'Solicitud aprobada',
+                perfil: resultado.perfil,
+            });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ mensaje: 'Error al aprobar solicitud' });
+        }
+    }
+);
+
+router.put(
+    '/solicitudes-perfil/:id/rechazar',
+    verificarToken,
+    verificarAdmin,
+    async (req, res) => {
+        try {
+            const resultado = await aplicarSolicitudPerfil(
+                req.params.id,
+                req.usuario.id,
+                false
+            );
+
+            if (resultado.error === 'no_encontrada') {
+                return res.status(404).json({ mensaje: 'Solicitud no encontrada' });
+            }
+
+            res.json({ mensaje: 'Solicitud rechazada' });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ mensaje: 'Error al rechazar solicitud' });
+        }
+    }
+);
+
 router.notificarUsuarioPendiente = notificarUsuarioPendiente;
 module.exports = router;

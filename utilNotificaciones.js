@@ -1,5 +1,6 @@
 const db = require('./db');
 const enviarNotificacion = require('./enviarNotificacion');
+const { SQL_USUARIO_RECIBE_AVISO } = require('./utilAvisos');
 
 const SQL_USUARIOS_CON_PUSH = `
   FROM usuarios u
@@ -104,11 +105,7 @@ async function obtenerUsuariosSinLeerAviso(avisoId) {
     AND EXISTS (
       SELECT 1 FROM avisos a
       WHERE a.id = ?
-      AND (
-        a.rolDes = 'todos'
-        OR u.rol = a.rolDes
-        OR u.username = a.autor
-      )
+      AND ${SQL_USUARIO_RECIBE_AVISO}
     )
   `;
 

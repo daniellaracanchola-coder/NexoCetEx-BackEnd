@@ -8,6 +8,11 @@ const {
 } = require('./utilNotificaciones');
 
 const { verificarToken, verificarAdmin } = require('./middleware/auth');
+const {
+    SQL_USUARIO_RECIBE_AVISO,
+    sqlPushDestinatariosAviso,
+    paramsPushAviso,
+} = require('./utilAvisos');
 
 //Backend para HomePage.vue o Avisos con conexion a Sql
 
@@ -23,6 +28,8 @@ router.get(
             a.conte,
             a.autor,
             a.rolDes,
+            a.grado_des,
+            a.grupo_des,
             a.tipo,
             a.fecha,
             GROUP_CONCAT(v.username) AS vistosPor
@@ -67,7 +74,26 @@ router.post(
     '/', 
     verificarToken,
     (req, res) => {
-    const { titulo, conte, autor, rolDes } = req.body;
+    const { titulo, conte, autor, rolDes, gradoDes, grupoDes } = req.body;
+    const rol = rolDes || 'todos';
+    let grado = null;
+    let grupo = null;
+
+    if (rol === 'alumno') {
+        if (gradoDes != null && gradoDes !== '' && gradoDes !== 'todos') {
+            grado = Number(gradoDes);
+            if (grado < 1 || grado > 8) {
+                return res.status(400).json({ mensaje: 'Grado de aviso no válido' });
+            }
+        }
+        if (grupoDes && grupoDes !== 'todos') {
+            const grupos = ['A', 'B', 'C', 'D', 'E', 'S'];
+            if (!grupos.includes(grupoDes)) {
+                return res.status(400).json({ mensaje: 'Grupo de aviso no válido' });
+            }
+            grupo = grupoDes;
+        }
+    }
 
     if (!titulo || !conte || !autor) {
         return res.status(400).json({
@@ -76,11 +102,11 @@ router.post(
     }
 
     const sql = `
-        INSERT INTO avisos (titulo, conte, autor, rolDes, tipo)
-        VALUES (?, ?, ?, ?, 'normal')
+        INSERT INTO avisos (titulo, conte, autor, rolDes, grado_des, grupo_des, tipo)
+        VALUES (?, ?, ?, ?, ?, ?, 'normal')
     `;
 
-    db.query(sql, [titulo, conte, autor, rolDes || 'todos'], (err, result) => {
+    db.query(sql, [titulo, conte, autor, rol, grado, grupo], (err, result) => {
         if(err) {
             return res.status(500).json({
                 mensaje: 'Error al crear el aviso'
@@ -91,19 +117,16 @@ router.post(
             FROM usuarios u
             LEFT JOIN configuraciones_usuarios c
                 ON u.id = c.usuario_id
-            WHERE autorizado = 1
-            AND token_push IS NOT NULL
+            WHERE u.autorizado = 1
+            AND u.token_push IS NOT NULL
             AND u.username != ?
             AND COALESCE(c.notificaciones, 1) = 1
-            AND (
-                ? = 'todos'
-                OR u.rol = ?
-            )
+            ${sqlPushDestinatariosAviso()}
         `;
 
         db.query(
             obtenerTokenSql, 
-            [autor, rolDes || 'todos', rolDes || 'todos'], 
+            [autor, ...paramsPushAviso(autor, rol, grado, grupo)], 
             async (err, usuarios) => {
             if (err) {
                 console.error('Error al obtener tokens:', err);
