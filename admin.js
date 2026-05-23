@@ -6,6 +6,11 @@ const {
     notificarAutorizacionUsuario,
     queryAsync,
 } = require('./utilNotificaciones');
+const {
+    esSuperAdminUsuario,
+    esSuperAdminUsername,
+    SUPER_ADMIN_USERNAME,
+} = require('./constantesAdmin');
 
 const {
     verificarToken,
@@ -97,49 +102,59 @@ router.delete(
     '/rechazar/:id', 
     verificarToken,
     verificarAdmin,
-    (req, res) => {
-    const sql = `
-        DELETE FROM usuarios
-        WHERE id = ?
-    `;
-
-    db.query(sql, [req.params.id], (err) => {
-        if (err) {
-            return res.status(500).json({
-                mensaje: 'Error al rechazar al usuario'
+    async (req, res) => {
+    try {
+        const filas = await queryAsync(
+            'SELECT id, username FROM usuarios WHERE id = ?',
+            [req.params.id]
+        );
+        if (!filas.length) {
+            return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+        }
+        if (esSuperAdminUsuario(filas[0])) {
+            return res.status(403).json({
+                mensaje: `La cuenta ${SUPER_ADMIN_USERNAME} no puede eliminarse`,
             });
         }
 
-        res.json({
-            mensaje: 'Usuario rechazado'
-        });
-    });
+        await queryAsync('DELETE FROM usuarios WHERE id = ?', [req.params.id]);
+        res.json({ mensaje: 'Usuario rechazado' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ mensaje: 'Error al rechazar al usuario' });
+    }
 });
 
 router.put(
     '/cambiar-rol/:id', 
     verificarToken,
     verificarAdmin,
-    (req, res) => {
+    async (req, res) => {
     const { rol } = req.body;
 
-    const sql = `
-        UPDATE usuarios
-        SET rol = ?
-        WHERE id = ?
-    `;
-
-    db.query(sql, [rol, req.params.id], (err) => {
-        if(err) {
-            return res.status(500).json({
-                mensaje: 'Error al cambiar el rol'
+    try {
+        const filas = await queryAsync(
+            'SELECT id, username, rol FROM usuarios WHERE id = ?',
+            [req.params.id]
+        );
+        if (!filas.length) {
+            return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+        }
+        if (esSuperAdminUsuario(filas[0])) {
+            return res.status(403).json({
+                mensaje: `El rol de ${SUPER_ADMIN_USERNAME} no puede modificarse`,
             });
         }
 
-        res.json({
-            mensaje: 'Rol actualizado'
-        });
-    });
+        await queryAsync('UPDATE usuarios SET rol = ? WHERE id = ?', [
+            rol,
+            req.params.id,
+        ]);
+        res.json({ mensaje: 'Rol actualizado' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ mensaje: 'Error al cambiar el rol' });
+    }
 });
 
 //Para revisar usuarios ya creados
@@ -171,31 +186,36 @@ router.put(
     '/baja/:id',
     verificarToken,
     verificarAdmin,
-    (req, res) => {
-
+    async (req, res) => {
         if (Number(req.params.id) === req.usuario.id) {
             return res.status(400).json({
-                mensaje: 'No puedes darte de baja a ti mismo'
+                mensaje: 'No puedes darte de baja a ti mismo',
             });
         }
-        
-        const sql = `
-            UPDATE usuarios
-            SET autorizado = 0
-            WHERE id = ?
-        `;
 
-        db.query(sql, [req.params.id], (err) => {
-            if (err) {
-                return res.status(500).json({
-                    mensaje: 'Error al dar de baja al usuario'
+        try {
+            const filas = await queryAsync(
+                'SELECT id, username FROM usuarios WHERE id = ?',
+                [req.params.id]
+            );
+            if (!filas.length) {
+                return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+            }
+            if (esSuperAdminUsuario(filas[0])) {
+                return res.status(403).json({
+                    mensaje: `La cuenta ${SUPER_ADMIN_USERNAME} no puede darse de baja`,
                 });
             }
 
-            res.json({
-                mensaje: 'Usuario dado de baja'
-            });
-        });
+            await queryAsync(
+                'UPDATE usuarios SET autorizado = 0 WHERE id = ?',
+                [req.params.id]
+            );
+            res.json({ mensaje: 'Usuario dado de baja' });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ mensaje: 'Error al dar de baja al usuario' });
+        }
     }
 );
 
@@ -218,12 +238,24 @@ router.put(
             }
 
             const objetivo = filas[0];
+
+            if (esSuperAdminUsuario(objetivo)) {
+                return res.status(403).json({
+                    mensaje: `La cuenta ${SUPER_ADMIN_USERNAME} no puede modificarse`,
+                });
+            }
+
             const updates = [];
             const params = [];
 
             if (username != null && String(username).trim()) {
                 const nuevo = String(username).trim();
                 if (nuevo !== objetivo.username) {
+                    if (esSuperAdminUsername(nuevo)) {
+                        return res.status(403).json({
+                            mensaje: 'Ese nombre de usuario está reservado para el sistema',
+                        });
+                    }
                     const existe = await queryAsync(
                         'SELECT id FROM usuarios WHERE username = ? AND id != ?',
                         [nuevo, objetivoId]
@@ -337,6 +369,10 @@ async function aplicarSolicitudPerfil(solicitudId, adminId, aprobar) {
 
     const s = solicitudes[0];
 
+    if (esSuperAdminUsuario(s)) {
+        return { error: 'superadmin_protegido' };
+    }
+
     if (!aprobar) {
         await queryAsync(
             `
@@ -353,6 +389,9 @@ async function aplicarSolicitudPerfil(solicitudId, adminId, aprobar) {
     const params = [];
 
     if (s.username_nuevo) {
+        if (esSuperAdminUsername(s.username_nuevo)) {
+            return { error: 'username_reservado' };
+        }
         const existe = await queryAsync(
             'SELECT id FROM usuarios WHERE username = ? AND id != ?',
             [s.username_nuevo, s.usuario_id]
@@ -417,6 +456,16 @@ router.put(
             if (resultado.error === 'username_duplicado') {
                 return res.status(400).json({
                     mensaje: 'El nombre solicitado ya está en uso',
+                });
+            }
+            if (resultado.error === 'superadmin_protegido') {
+                return res.status(403).json({
+                    mensaje: `No se puede modificar la cuenta ${SUPER_ADMIN_USERNAME}`,
+                });
+            }
+            if (resultado.error === 'username_reservado') {
+                return res.status(403).json({
+                    mensaje: 'Ese nombre de usuario está reservado para el sistema',
                 });
             }
 

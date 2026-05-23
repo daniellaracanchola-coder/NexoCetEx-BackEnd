@@ -4,6 +4,10 @@ const router = express.Router();
 const enviarNotificacion = require('./enviarNotificacion');
 const { queryAsync } = require('./utilNotificaciones');
 const { verificarToken } = require('./middleware/auth');
+const {
+  esSuperAdminUsuario,
+  esSuperAdminUsername,
+} = require('./constantesAdmin');
 
 const GRUPOS_VALIDOS = ['A', 'B', 'C', 'D', 'E', 'S'];
 
@@ -69,7 +73,7 @@ router.post('/solicitud-cambio', verificarToken, async (req, res) => {
 
   try {
     const actual = await queryAsync(
-      'SELECT username, grado, grupo FROM usuarios WHERE id = ?',
+      'SELECT id, username, grado, grupo, rol FROM usuarios WHERE id = ?',
       [req.usuario.id]
     );
     if (!actual.length) {
@@ -77,6 +81,12 @@ router.post('/solicitud-cambio', verificarToken, async (req, res) => {
     }
 
     const u = actual[0];
+
+    if (esSuperAdminUsuario(u)) {
+      return res.status(403).json({
+        mensaje: 'Esta cuenta no puede modificarse mediante solicitud',
+      });
+    }
     const usernameNuevo =
       username && String(username).trim() !== u.username
         ? String(username).trim()
@@ -101,6 +111,11 @@ router.post('/solicitud-cambio', verificarToken, async (req, res) => {
     }
 
     if (usernameNuevo) {
+      if (esSuperAdminUsername(usernameNuevo)) {
+        return res.status(403).json({
+          mensaje: 'Ese nombre de usuario está reservado para el sistema',
+        });
+      }
       const existe = await queryAsync(
         'SELECT id FROM usuarios WHERE username = ? AND id != ?',
         [usernameNuevo, req.usuario.id]

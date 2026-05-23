@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('./db');
 const adminRoutes = require('./admin');
+const { esSuperAdminUsername } = require('./constantesAdmin');
 
 const router = express.Router();
 
@@ -17,6 +18,12 @@ router.post('/registro', async (req, res) => {
     if (!username || !password) {
         return res.status(400).json({
             mensaje: 'Faltan datos'
+        });
+    }
+
+    if (esSuperAdminUsername(username)) {
+        return res.status(403).json({
+            mensaje: 'Ese nombre de usuario está reservado para el sistema',
         });
     }
 
