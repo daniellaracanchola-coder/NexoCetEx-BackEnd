@@ -1,6 +1,11 @@
 const express = require('express');
 const db = require('./db');
 const router = express.Router();
+const {
+    notificarPorRoles,
+    notificarPorUsername,
+    truncarTexto,
+} = require('./utilNotificaciones');
 
 router.get('/', (req, res) => {
     res.status(200).send('Envio Correcto');
@@ -46,12 +51,21 @@ router.post('/dudas', (req, res) => {
     db.query(
         sql,
         [req.body.autor, req.body.conte],
-        (err, result) => {
+        async (err, result) => {
             if(err) {
                 return res.status(500).json({
                     mensaje: 'Error al guardar duda'
                 });
             }
+
+            await notificarPorRoles(
+                ['admin', 'profesor'],
+                'Nueva duda en Nexo de ayuda',
+                `${req.body.autor}: ${truncarTexto(req.body.conte)}`,
+                req.body.autor,
+                '/nexo-a'
+            );
+
             res.json({
                 id: result.insertId,
                 autor: req.body.autor,
@@ -72,28 +86,50 @@ router.post('/dudas/:id/respuestas', (req, res) => {
         });
     }
 
-    const sql = `
+    const dudaId = req.params.id;
+
+    db.query(
+        'SELECT autor, conte FROM dudas WHERE id = ?',
+        [dudaId],
+        (err, dudas) => {
+            if (err || dudas.length === 0) {
+                return res.status(404).json({
+                    mensaje: 'Duda no encontrada'
+                });
+            }
+
+            const autorDuda = dudas[0].autor;
+            const previewDuda = truncarTexto(dudas[0].conte, 60);
+
+            const sql = `
         INSERT INTO respuestas (duda_id, autor, conte, fecha)
         VALUES (?, ?, ?, NOW())
     `;
 
-    db.query(
-        sql,
-        [
-            req.params.id,
-            req.body.autor,
-            req.body.conte
-        ],
-        (err, result) => {
-            if (err) {
-                return res.status(500).json({
-                    mensaje: 'Error al guardar la respuesta'
-                });
-            }
+            db.query(
+                sql,
+                [dudaId, req.body.autor, req.body.conte],
+                async (errInsert) => {
+                    if (errInsert) {
+                        return res.status(500).json({
+                            mensaje: 'Error al guardar la respuesta'
+                        });
+                    }
 
-            res.json({
-                mensaje: 'Respuesta Guardada'
-            });
+                    if (autorDuda && autorDuda !== req.body.autor) {
+                        await notificarPorUsername(
+                            autorDuda,
+                            'Respuesta a tu duda',
+                            `${req.body.autor} respondió${previewDuda ? ` sobre "${previewDuda}"` : ''}: ${truncarTexto(req.body.conte)}`,
+                            '/nexo-a'
+                        );
+                    }
+
+                    res.json({
+                        mensaje: 'Respuesta Guardada'
+                    });
+                }
+            );
         }
     );
 });

@@ -2,6 +2,10 @@ const express = require('express');
 const db = require('./db');
 const router = express.Router();
 const enviarNotificacion = require('./enviarNotificacion');
+const {
+    notificarAutorizacionUsuario,
+    queryAsync,
+} = require('./utilNotificaciones');
 
 const {
     verificarToken,
@@ -30,7 +34,8 @@ const notificarUsuarioPendiente = (username) => {
             await enviarNotificacion(
                 admin.token_push,
                 'Usuario pendiente de aprobacion',
-                `${username} solicita aprobacion de cuenta`
+                `${username} solicita aprobacion de cuenta`,
+                { ruta: '/admin' }
             );
         }
     });
@@ -62,23 +67,30 @@ router.put(
     '/aprobar/:id', 
     verificarToken,
     verificarAdmin,
-    (req,res) => {
-    const sql = `
-        UPDATE usuarios
-        SET autorizado = 1
-        WHERE id = ?
-    `;
-    db.query(sql, [req.params.id], (err) => {
-        if (err) {
-            return res.status(500).json({
-                mensaje: 'Error al aprobar usuario'
-            });
-        }
+    async (req, res) => {
+    const usuarioId = req.params.id;
+
+    try {
+        await queryAsync(
+            `
+            UPDATE usuarios
+            SET autorizado = 1, aviso_autorizacion_pendiente = 1
+            WHERE id = ?
+            `,
+            [usuarioId]
+        );
+
+        await notificarAutorizacionUsuario(usuarioId);
 
         res.json({
             mensaje: 'Usuario aprobado'
         });
-    });
+    } catch (err) {
+        console.error('Error al aprobar usuario:', err);
+        res.status(500).json({
+            mensaje: 'Error al aprobar usuario'
+        });
+    }
 });
 
 router.delete(

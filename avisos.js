@@ -2,8 +2,12 @@ const express = require('express');
 const db = require('./db');
 const router = express.Router();
 const enviarNotificacion = require('./enviarNotificacion');
+const {
+    notificarRecordatorioAviso,
+    obtenerUsuariosSinLeerAviso,
+} = require('./utilNotificaciones');
 
-const { verificarToken } = require('./middleware/auth');
+const { verificarToken, verificarAdmin } = require('./middleware/auth');
 
 //Backend para HomePage.vue o Avisos con conexion a Sql
 
@@ -30,17 +34,29 @@ router.get(
             a.fecha DESC
     `;
 
-    db.query(sql, (err, results) => {
+    db.query(sql, async (err, results) => {
         if (err) {
             return res.status(500).json({
                 mensaje: 'Error al obtener avisos'
             });
         }
 
-        const avisos = results.map(a => ({
-            ...a,
-            vistosPor: a.vistosPor ? a.vistosPor.split(',') : []
-        }));
+        const avisos = await Promise.all(
+            results.map(async (a) => {
+                const aviso = {
+                    ...a,
+                    vistosPor: a.vistosPor ? a.vistosPor.split(',') : [],
+                };
+
+                if (req.usuario.rol === 'admin') {
+                    const sinLeer = await obtenerUsuariosSinLeerAviso(a.id);
+                    aviso.pendientesLectura = sinLeer.length;
+                    aviso.sinLeer = sinLeer.map((u) => u.username);
+                }
+
+                return aviso;
+            })
+        );
 
         res.json(avisos);
     });
@@ -96,7 +112,8 @@ router.post(
                     await enviarNotificacion(
                         usuario.token_push,
                         titulo,
-                        conte
+                        conte,
+                        { ruta: '/home' }
                     );
                 }
             }
@@ -108,6 +125,34 @@ router.post(
         });
     });
 });
+
+// Recordatorio push a quienes no marcaron el aviso como leído (solo admin)
+router.post(
+    '/:id/recordar',
+    verificarToken,
+    verificarAdmin,
+    async (req, res) => {
+        try {
+            const resultado = await notificarRecordatorioAviso(req.params.id);
+
+            if (resultado.error === 'aviso_no_encontrado') {
+                return res.status(404).json({
+                    mensaje: 'Aviso no encontrado'
+                });
+            }
+
+            res.json({
+                mensaje: 'Recordatorios enviados',
+                enviados: resultado.enviados
+            });
+        } catch (err) {
+            console.error('Error al enviar recordatorios:', err);
+            res.status(500).json({
+                mensaje: 'Error al enviar recordatorios'
+            });
+        }
+    }
+);
 
 //Para marcar como leido
 router.post(

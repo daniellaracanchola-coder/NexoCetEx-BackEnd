@@ -588,7 +588,8 @@ router.post(
                             await enviarNotificacion(
                                 usuario.token_push,
                                 usernameEmisor,
-                                desencriptarMensaje(contenidoEncriptado)
+                                desencriptarMensaje(contenidoEncriptado),
+                                { ruta: `/chat/${chatId}` }
                             );
 
                         }
