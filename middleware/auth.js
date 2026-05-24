@@ -12,7 +12,7 @@ const verificarToken = (req, res, next) => {
 
     if (!token) {
         return res.status(401).json({
-            mensaje: 'Token invalido'
+            mensaje: 'Token inválido'
         });
     }
 
@@ -25,7 +25,7 @@ const verificarToken = (req, res, next) => {
         next();
     } catch (error) {
         return res.status(403).json({
-            mensaje: 'Token invalido o expirado'
+            mensaje: 'Token inválido o expirado'
         });
     }
 };

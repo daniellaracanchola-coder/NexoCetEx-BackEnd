@@ -38,7 +38,7 @@ router.post('/registro', async (req, res) => {
     const rolesPermitidos = ['alumno', 'profesor'];
     if (!rolesPermitidos.includes(rol)){
         return res.status(400).json({
-            mensaje: 'Rol invalido'
+            mensaje: 'Rol inválido'
         });
     }
     

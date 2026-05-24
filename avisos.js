@@ -201,12 +201,12 @@ router.post(
     db.query(sql, [req.params.id, username, req.params.id, username], (err) => {
         if (err) {
             return res.status(500).json({
-                mensaje: 'Error al marcar aviso como leido'
+                mensaje: 'Error al marcar aviso como leído'
             });
         }
 
         res.json({
-            mensaje: 'Aviso marcado como leido con exito'
+            mensaje: 'Aviso marcado como leído con éxito'
         });
     });
 });

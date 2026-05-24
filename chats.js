@@ -509,7 +509,7 @@ router.post(
 
         if (!contenido) {
             return res.status(400).json({
-                mensaje: 'El mensaje no puede estar vacio'
+                mensaje: 'El mensaje no puede estar vacío'
             });
         }
 
@@ -597,7 +597,7 @@ router.post(
                     }
 
                     res.json({
-                        mensaje: 'Mensaje enviado con exito',
+                        mensaje: 'Mensaje enviado con éxito',
                         id: result.insertId
                     });
 
@@ -753,7 +753,7 @@ router.put(
             }
 
             res.json({
-                mensaje: 'Nombre actualizado con exito'
+                mensaje: 'Nombre actualizado con éxito'
             });
         });
     }

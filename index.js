@@ -126,7 +126,7 @@ router.post('/dudas/:id/respuestas', (req, res) => {
                     }
 
                     res.json({
-                        mensaje: 'Respuesta Guardada'
+                        mensaje: 'Respuesta guardada'
                     });
                 }
             );
@@ -175,7 +175,7 @@ router.put('/dudas/:id/revision', (req, res) => {
         (err, result) => {
             if (err) {
                 return res.status(500).json({
-                    mensaje: 'Error al cambiar a revision'
+                    mensaje: 'Error al cambiar a revisión'
                 });
             }
 

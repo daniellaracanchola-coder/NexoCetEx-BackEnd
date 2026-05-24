@@ -11,7 +11,7 @@ router.post('/login', async (req, res) => {
 
     if (!username || !password) {
         return res.status(400).json({
-            mensaje: 'Faltan datos, reviselo por favor'
+            mensaje: 'Faltan datos, revíselo por favor'
         });
     }
 
@@ -50,7 +50,7 @@ router.post('/login', async (req, res) => {
 
             if(!usuario.autorizado) {
                 return res.status(403).json({
-                    mensaje: 'Usuario pendiente de autorizacion'
+                    mensaje: 'Usuario pendiente de autorización'
                 });
             }
 
